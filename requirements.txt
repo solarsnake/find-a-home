@@ -27,7 +27,10 @@ uvicorn[standard]==0.29.0
 python-dateutil==2.9.0
 
 # Realtor.com scraper (wraps Realtor.com's internal API — no browser needed)
-homeharvest==0.3.4
+homeharvest>=0.3.25
 
 # Data handling for HomeHarvest results
 pandas>=2.0.0
+
+# Python 3.9 compatibility: makes X | Y union syntax work in pydantic models
+eval_type_backport; python_version < "3.10"
