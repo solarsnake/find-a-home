@@ -23,6 +23,8 @@ from app.config import Settings, load_profiles
 from app.filters.listing_filter import evaluate_listing
 from app.models import AlertPriority, DataSource, MatchResult, SearchProfile
 from app.scraper.base import ScraperError
+from app.scraper.homes import HomesScraper
+from app.scraper.realtor import RealtorScraper
 from app.scraper.redfin import RedfinScraper
 from app.scraper.zillow import ZillowScraper
 from app.storage.seen_listings import SeenListings
@@ -98,13 +100,19 @@ class Engine:
 
         # Initialise scrapers for this profile's requested sources
         scrapers: list = []
-        if DataSource.ZILLOW in sources:
-            try:
-                scrapers.append(ZillowScraper())
-            except ImportError as exc:
-                logger.warning("Zillow scraper unavailable: %s", exc)
-        if DataSource.REDFIN in sources:
-            scrapers.append(RedfinScraper())
+        scraper_map = {
+            DataSource.ZILLOW: ZillowScraper,
+            DataSource.REDFIN: RedfinScraper,
+            DataSource.REALTOR: RealtorScraper,
+            DataSource.HOMES: HomesScraper,
+        }
+        for source in sources:
+            cls = scraper_map.get(source)
+            if cls:
+                try:
+                    scrapers.append(cls())
+                except ImportError as exc:
+                    logger.warning("%s scraper unavailable: %s", source.value, exc)
 
         for scraper in scrapers:
             try:

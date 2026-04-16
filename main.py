@@ -155,32 +155,106 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 
 
 @cli.command()
-@click.option("--profile", "profile_name", default=None, help="Run only this profile by name")
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Run scrapers and filters but do NOT send alerts or mark listings as seen",
-)
-@click.option(
-    "--sources",
-    multiple=True,
-    type=click.Choice(["zillow", "redfin"], case_sensitive=False),
-    default=None,
-    help="Override which scraper(s) to use (default: use each profile's sources list)",
-)
+# ── Profile selection ─────────────────────────────────────────────────────────
+@click.option("--profile", "profile_name", default=None,
+              help="Run only this profile by name")
+@click.option("--dry-run", is_flag=True,
+              help="Scrape and filter but do NOT send alerts or mark listings as seen")
+@click.option("--sources", multiple=True,
+              type=click.Choice(["zillow", "redfin", "realtor", "homes"], case_sensitive=False),
+              help="Override scraper(s) for this run")
+# ── Financial overrides ───────────────────────────────────────────────────────
+@click.option("--max-piti", type=float, default=None,
+              help="Max monthly PITI, e.g. 4500")
+@click.option("--down-payment", type=float, default=None,
+              help="Down payment, e.g. 100000")
+@click.option("--rate", type=float, default=None,
+              help="Interest rate as decimal, e.g. 0.065 for 6.5%%")
+# ── Property overrides ────────────────────────────────────────────────────────
+@click.option("--min-beds", type=int, default=None,
+              help="Minimum bedrooms")
+@click.option("--max-beds", type=int, default=None,
+              help="Maximum bedrooms")
+@click.option("--min-baths", type=float, default=None,
+              help="Minimum bathrooms")
+@click.option("--min-sqft", type=int, default=None,
+              help="Minimum square footage")
+@click.option("--max-sqft", type=int, default=None,
+              help="Maximum square footage")
+@click.option("--min-price", type=float, default=None,
+              help="Minimum listing price")
+@click.option("--max-price", type=float, default=None,
+              help="Maximum listing price")
+@click.option("--max-hoa", type=float, default=None,
+              help="Max HOA fee/mo (0 = strict no-HOA only)")
+# ── Special flags ─────────────────────────────────────────────────────────────
+@click.option("--assumable-only", is_flag=True, default=False,
+              help="Only show listings with assumable loan keywords")
+@click.option("--has-solar", is_flag=True, default=False,
+              help="Only show listings with solar mentioned")
 @click.pass_context
 def run(
     ctx: click.Context,
     profile_name: Optional[str],
     dry_run: bool,
     sources: tuple[str, ...],
+    max_piti: Optional[float],
+    down_payment: Optional[float],
+    rate: Optional[float],
+    min_beds: Optional[int],
+    max_beds: Optional[int],
+    min_baths: Optional[float],
+    min_sqft: Optional[int],
+    max_sqft: Optional[int],
+    min_price: Optional[float],
+    max_price: Optional[float],
+    max_hoa: Optional[float],
+    assumable_only: bool,
+    has_solar: bool,
 ) -> None:
-    """Run the scraper, apply filters, and send alerts for new matches."""
+    """
+    Run scrapers, apply filters, send alerts for new matches.
+
+    All filter flags override the loaded profile for this run only —
+    nothing is written back to search_profiles.json.
+
+    Examples:
+
+    \b
+      # Run Hartwell with a tighter budget
+      python main.py run --profile "Lake Hartwell GA/SC" --max-piti 3000
+
+      # Find only assumable loans with solar, any area
+      python main.py run --assumable-only --has-solar --dry-run
+
+      # Quick check of Durham with 3-bed minimum
+      python main.py run --profile "Durham NC" --min-beds 3 --dry-run
+    """
     try:
         profiles = load_profiles()
     except FileNotFoundError as exc:
         console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
+
+    # Build override dict from any flags that were explicitly set
+    overrides: dict = {}
+    if max_piti is not None:      overrides["max_monthly_piti"] = max_piti
+    if down_payment is not None:  overrides["down_payment"] = down_payment
+    if rate is not None:          overrides["interest_rate"] = rate
+    if min_beds is not None:      overrides["min_bedrooms"] = min_beds
+    if max_beds is not None:      overrides["max_bedrooms"] = max_beds
+    if min_baths is not None:     overrides["min_bathrooms"] = min_baths
+    if min_sqft is not None:      overrides["min_sqft"] = min_sqft
+    if max_sqft is not None:      overrides["max_sqft"] = max_sqft
+    if min_price is not None:     overrides["min_price"] = min_price
+    if max_price is not None:     overrides["max_price"] = max_price
+    if max_hoa is not None:       overrides["max_hoa_monthly"] = max_hoa
+    if assumable_only:            overrides["assumable_only"] = True
+    if has_solar:                 overrides["requires_solar"] = True
+
+    if overrides:
+        profiles = [p.model_copy(update=overrides) for p in profiles]
+        console.print(f"[cyan]Overrides applied:[/cyan] {overrides}")
 
     sources_override = [DataSource(s) for s in sources] if sources else None
 

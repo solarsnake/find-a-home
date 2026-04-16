@@ -25,3 +25,9 @@ uvicorn[standard]==0.29.0
 
 # Utilities
 python-dateutil==2.9.0
+
+# Realtor.com scraper (wraps Realtor.com's internal API — no browser needed)
+homeharvest==0.3.4
+
+# Data handling for HomeHarvest results
+pandas>=2.0.0

@@ -24,9 +24,13 @@ import urllib.parse
 from typing import AsyncIterator, Optional
 from datetime import datetime
 
+import logging
+
 from app.models import DataSource, RawListing, SearchProfile
 from app.scraper.base import BaseScraper, ScraperError
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 try:
     from playwright.async_api import async_playwright, Browser, BrowserContext, Page
@@ -259,6 +263,11 @@ class ZillowScraper(BaseScraper):
                 await self._random_delay()
 
                 if await self._is_captcha(page):
+                    logger.warning(
+                        "Zillow blocked request for zip %s (CAPTCHA / Access Denied). "
+                        "Zillow requires a residential IP — run from your home network.",
+                        zip_code,
+                    )
                     await page.close()
                     continue
 

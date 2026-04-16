@@ -56,6 +56,17 @@ TAX_RATES: dict[TaxRegion, float] = {
 class DataSource(str, Enum):
     ZILLOW = "zillow"
     REDFIN = "redfin"
+    REALTOR = "realtor"
+    HOMES = "homes"
+
+
+class PropertyType(str, Enum):
+    SINGLE_FAMILY = "single_family"
+    MULTI_FAMILY = "multi_family"
+    CONDO = "condo"
+    TOWNHOUSE = "townhouse"
+    LAND = "land"
+    ANY = "any"
 
 
 class AlertPriority(str, Enum):
@@ -78,27 +89,46 @@ class SearchProfile(BaseModel):
     name: str
     enabled: bool = True
 
-    # Location
+    # ── Location ──────────────────────────────────────────────────────────────
     zip_codes: list[str]
     tax_region: TaxRegion
 
-    # Property filters
+    # ── Property filters ──────────────────────────────────────────────────────
     min_bedrooms: int = Field(default=4, ge=1)
+    max_bedrooms: Optional[int] = None
     min_bathrooms: float = Field(default=2.0, ge=1.0)
+    min_sqft: Optional[int] = None
+    max_sqft: Optional[int] = None
+    property_types: list[PropertyType] = Field(
+        default_factory=lambda: [PropertyType.SINGLE_FAMILY]
+    )
+
+    # ── HOA ───────────────────────────────────────────────────────────────────
+    # max_hoa_monthly = 0  → strict no-HOA only
+    # max_hoa_monthly = 50 → allow up to $50/mo (default)
+    # max_hoa_monthly = None is not allowed — use a large number if you don't care
     max_hoa_monthly: float = Field(default=50.0, ge=0)
 
-    # Financial targets
+    # ── Financial targets ─────────────────────────────────────────────────────
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
     max_monthly_piti: float = Field(default=4_500.0, gt=0)
     down_payment: float = Field(default=100_000.0, ge=0)
     interest_rate: float = Field(default=0.065, gt=0, lt=1)
     monthly_insurance: float = Field(default=200.0, ge=0)
 
-    # Optional hard cap on price (limits scraping scope & data usage)
-    max_price: Optional[float] = None
+    # ── Special deal flags ────────────────────────────────────────────────────
+    # assumable_only: skip listings with no assumable-loan keywords
+    assumable_only: bool = False
+    # requires_solar: skip listings with no solar mention in description
+    requires_solar: bool = False
 
-    # Which scrapers to use for this profile
+    # ── Data sources ──────────────────────────────────────────────────────────
     sources: list[DataSource] = Field(
-        default_factory=lambda: [DataSource.ZILLOW, DataSource.REDFIN]
+        default_factory=lambda: [
+            DataSource.ZILLOW, DataSource.REDFIN,
+            DataSource.REALTOR, DataSource.HOMES,
+        ]
     )
 
     @field_validator("zip_codes")
@@ -107,6 +137,16 @@ class SearchProfile(BaseModel):
         if not v:
             raise ValueError("At least one zip code is required")
         return v
+
+
+# ── Solar detection ───────────────────────────────────────────────────────────
+
+SOLAR_KEYWORDS = [
+    "solar panel", "solar system", "solar energy", "solar power",
+    "solar owned", "solar paid", "photovoltaic", "pv system",
+    "net metering", "solar lease", "solar ppa", "rooftop solar",
+    "solar installed", "solar included",
+]
 
 
 # ── Raw listing (scraper output) ──────────────────────────────────────────────
@@ -128,13 +168,23 @@ class RawListing(BaseModel):
     bedrooms: int
     bathrooms: float
     sqft: Optional[int] = None
+    lot_sqft: Optional[int] = None
     hoa_monthly: Optional[float] = None     # None = not reported; 0 = no HOA
     description: str = ""
+    property_type: Optional[str] = None
+    days_on_market: Optional[int] = None
+    year_built: Optional[int] = None
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
     def short_address(self) -> str:
         return f"{self.address}, {self.city}, {self.state} {self.zip_code}"
+
+    @property
+    def has_solar(self) -> bool:
+        """Detect solar mention in description."""
+        desc = self.description.lower()
+        return any(kw in desc for kw in SOLAR_KEYWORDS)
 
 
 # ── Financial breakdown ───────────────────────────────────────────────────────
