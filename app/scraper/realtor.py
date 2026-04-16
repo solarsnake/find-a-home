@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 try:
     from homeharvest import scrape_property
     HOMEHARVEST_AVAILABLE = True
-except ImportError:
+except (ImportError, TypeError):
+    # TypeError is raised on Python < 3.10: homeharvest uses X | Y union syntax
+    # in function signatures which requires Python 3.10+ to evaluate at import time.
+    # Upgrade to Python 3.10+ to enable Realtor.com scraping.
     HOMEHARVEST_AVAILABLE = False
 
 # Map our PropertyType → HomeHarvest style strings
@@ -64,8 +67,9 @@ class RealtorScraper(BaseScraper):
     def __init__(self) -> None:
         if not HOMEHARVEST_AVAILABLE:
             raise ImportError(
-                "homeharvest is required for Realtor.com scraping.\n"
-                "Run: pip install homeharvest"
+                "homeharvest is unavailable. If you are on Python 3.9, upgrade to "
+                "Python 3.10+ — homeharvest uses union syntax (X | Y) that requires it.\n"
+                "brew install python@3.11 && python3.11 -m venv .venv"
             )
 
     async def search(self, profile: SearchProfile) -> AsyncIterator[RawListing]:
