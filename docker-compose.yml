@@ -1,0 +1,56 @@
+version: "3.9"
+
+# ── find-a-home docker-compose ────────────────────────────────────────────────
+#
+# One-shot scraper run (default):
+#   docker compose run --rm scraper
+#
+# Web API server (future):
+#   docker compose up api
+#
+# Scheduled runs via supercronic:
+#   docker compose up cron
+
+services:
+
+  # ── Scraper: one-shot run ───────────────────────────────────────────────────
+  scraper:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./search_profiles.json:/app/search_profiles.json:ro
+    command: ["python", "main.py", "run"]
+
+  # ── Cron scheduler: run every 6 hours ──────────────────────────────────────
+  # Uses supercronic (a cron-compatible container-native scheduler).
+  # Install: nothing extra — it runs find-a-home via docker exec or
+  # you can use the system cron approach in cron.md instead.
+  cron:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./search_profiles.json:/app/search_profiles.json:ro
+      - ./crontab:/etc/cron.d/find-a-home:ro
+    # Use a simple shell loop as the entrypoint; swap for supercronic if preferred
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "while true; do
+        python main.py run;
+        echo 'Sleeping 6 hours...';
+        sleep 21600;
+      done"
+    restart: unless-stopped
+
+  # ── FastAPI web server (future web/iOS backend) ────────────────────────────
+  api:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./search_profiles.json:/app/search_profiles.json:ro
+    ports:
+      - "8000:8000"
+    command: ["python", "main.py", "serve", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped

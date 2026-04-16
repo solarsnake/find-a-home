@@ -1,0 +1,257 @@
+"""
+Core data models for find-a-home.
+
+Design intent: every model here is JSON-serialisable via .model_dump().
+This means the same objects work unchanged in:
+  - the CLI (printed via rich)
+  - the FastAPI layer (serialised to JSON responses)
+  - a future iOS push-notification payload
+
+SearchProfile is the primary user-facing entity.  In the future web/iOS app
+it becomes the body of a POST /api/v1/profiles request from a "New Search"
+form page.
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+
+# ── Region / tax helpers ─────────────────────────────────────────────────────
+
+class TaxRegion(str, Enum):
+    CALIFORNIA = "california"
+    GEORGIA = "georgia"
+    SOUTH_CAROLINA = "south_carolina"
+    NORTH_CAROLINA = "north_carolina"
+    TEXAS = "texas"
+    FLORIDA = "florida"
+    COLORADO = "colorado"
+    WASHINGTON = "washington"
+    OREGON = "oregon"
+    ARIZONA = "arizona"
+
+
+# Effective annual property-tax rates by region (as a decimal fraction of AV)
+# Add new states here — no other code changes needed.
+TAX_RATES: dict[TaxRegion, float] = {
+    TaxRegion.CALIFORNIA: 0.012,       # ~1.2 % (Escondido / Ramona / VC)
+    TaxRegion.GEORGIA: 0.006,          # ~0.6 % (Hart County)
+    TaxRegion.SOUTH_CAROLINA: 0.006,   # ~0.6 % (Oconee / Anderson Counties)
+    TaxRegion.NORTH_CAROLINA: 0.011,   # ~1.1 % (Durham County combined rate)
+    TaxRegion.TEXAS: 0.018,            # ~1.8 % (varies widely by county)
+    TaxRegion.FLORIDA: 0.009,          # ~0.9 %
+    TaxRegion.COLORADO: 0.005,         # ~0.5 %
+    TaxRegion.WASHINGTON: 0.010,       # ~1.0 %
+    TaxRegion.OREGON: 0.009,           # ~0.9 %
+    TaxRegion.ARIZONA: 0.007,          # ~0.7 %
+}
+
+
+class DataSource(str, Enum):
+    ZILLOW = "zillow"
+    REDFIN = "redfin"
+
+
+class AlertPriority(str, Enum):
+    NORMAL = "normal"       # Meets all criteria
+    HIGH = "high"           # Assumable loan detected
+    CRITICAL = "critical"   # Assumable + under PITI budget
+
+
+# ── Search profile ────────────────────────────────────────────────────────────
+
+class SearchProfile(BaseModel):
+    """
+    All criteria for a single search.
+
+    JSON-safe so it can be POSTed from a web form or stored in a mobile app's
+    user profile.  Multiple profiles are supported — run them all with
+    `python main.py run` or target one with `--profile "Name"`.
+    """
+
+    name: str
+    enabled: bool = True
+
+    # Location
+    zip_codes: list[str]
+    tax_region: TaxRegion
+
+    # Property filters
+    min_bedrooms: int = Field(default=4, ge=1)
+    min_bathrooms: float = Field(default=2.0, ge=1.0)
+    max_hoa_monthly: float = Field(default=50.0, ge=0)
+
+    # Financial targets
+    max_monthly_piti: float = Field(default=4_500.0, gt=0)
+    down_payment: float = Field(default=100_000.0, ge=0)
+    interest_rate: float = Field(default=0.065, gt=0, lt=1)
+    monthly_insurance: float = Field(default=200.0, ge=0)
+
+    # Optional hard cap on price (limits scraping scope & data usage)
+    max_price: Optional[float] = None
+
+    # Which scrapers to use for this profile
+    sources: list[DataSource] = Field(
+        default_factory=lambda: [DataSource.ZILLOW, DataSource.REDFIN]
+    )
+
+    @field_validator("zip_codes")
+    @classmethod
+    def zip_codes_not_empty(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("At least one zip code is required")
+        return v
+
+
+# ── Raw listing (scraper output) ──────────────────────────────────────────────
+
+class RawListing(BaseModel):
+    """
+    Data as extracted from a scraper — no processing applied yet.
+    Stored in seen_listings.json to deduplicate across runs.
+    """
+
+    listing_id: str                         # Source-specific ID (zpid, redfin ID …)
+    source: DataSource
+    url: str                                # Full canonical listing URL
+    address: str
+    city: str
+    state: str
+    zip_code: str
+    price: float
+    bedrooms: int
+    bathrooms: float
+    sqft: Optional[int] = None
+    hoa_monthly: Optional[float] = None     # None = not reported; 0 = no HOA
+    description: str = ""
+    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @property
+    def short_address(self) -> str:
+        return f"{self.address}, {self.city}, {self.state} {self.zip_code}"
+
+
+# ── Financial breakdown ───────────────────────────────────────────────────────
+
+class PITIBreakdown(BaseModel):
+    """Monthly PITI components.  Immutable once computed."""
+
+    loan_amount: float
+    annual_rate: float
+    principal_interest: float
+    monthly_taxes: float
+    monthly_insurance: float
+    total_monthly: float
+
+    @property
+    def formatted(self) -> str:
+        return (
+            f"P&I ${self.principal_interest:,.0f}  "
+            f"+ Tax ${self.monthly_taxes:,.0f}  "
+            f"+ Ins ${self.monthly_insurance:,.0f}  "
+            f"= ${self.total_monthly:,.0f}/mo"
+        )
+
+
+# ── Assumable-loan details ────────────────────────────────────────────────────
+
+# Keywords searched (case-insensitive) in the listing description
+ASSUMABLE_KEYWORDS = [
+    "assumable",
+    "assume the loan",
+    "va assumption",
+    "assumption of loan",
+    "subject to",
+    "take over the loan",
+]
+
+# Regex patterns to extract loan balance / rate from description
+_BALANCE_RE = re.compile(
+    r"(?:loan\s+balance|outstanding\s+balance|remaining\s+balance|balance\s+of)"
+    r"\s*(?:is|of|:)?\s*\$?([\d,]+(?:\.\d+)?)\s*[kK]?",
+    re.IGNORECASE,
+)
+_RATE_RE = re.compile(
+    r"(\d+\.?\d*)\s*%\s*(?:interest\s+rate|rate|fixed|VA)",
+    re.IGNORECASE,
+)
+_DOLLAR_NEAR_ASSUME_RE = re.compile(
+    r"assum\w*[^.]*?\$\s*([\d,]+(?:\.\d+)?)\s*[kK]?",
+    re.IGNORECASE,
+)
+
+
+class AssumableDetails(BaseModel):
+    is_assumable: bool = False
+    assumable_rate: Optional[float] = None      # e.g. 0.025 for 2.5 %
+    estimated_loan_balance: Optional[float] = None
+    equity_gap: Optional[float] = None          # listing_price − loan_balance
+    high_cash_required: bool = False            # equity_gap > $110 k
+    matched_keywords: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def from_description(cls, description: str, price: float) -> "AssumableDetails":
+        desc_lower = description.lower()
+
+        matched = [kw for kw in ASSUMABLE_KEYWORDS if kw in desc_lower]
+        if not matched:
+            return cls()
+
+        # Try to parse loan balance
+        balance: Optional[float] = None
+        for pattern in (_BALANCE_RE, _DOLLAR_NEAR_ASSUME_RE):
+            m = pattern.search(description)
+            if m:
+                raw = m.group(1).replace(",", "")
+                val = float(raw)
+                # Handle shorthand like "$450k"
+                if val < 5_000:
+                    val *= 1_000
+                balance = val
+                break
+
+        # Try to parse assumable rate
+        rate: Optional[float] = None
+        m = _RATE_RE.search(description)
+        if m:
+            rate = float(m.group(1)) / 100
+
+        equity_gap = (price - balance) if balance is not None else None
+        high_cash = (equity_gap is not None and equity_gap > 110_000)
+
+        return cls(
+            is_assumable=True,
+            assumable_rate=rate,
+            estimated_loan_balance=balance,
+            equity_gap=equity_gap,
+            high_cash_required=high_cash,
+            matched_keywords=matched,
+        )
+
+
+# ── Final match result ────────────────────────────────────────────────────────
+
+class MatchResult(BaseModel):
+    """
+    A listing that passed all filters.
+
+    Returned by the engine regardless of transport layer — the CLI pretty-prints
+    it, the FastAPI layer serialises it to JSON, a future push-notification
+    service wraps it in an APNs/FCM payload.
+    """
+
+    listing: RawListing
+    profile_name: str
+    piti: PITIBreakdown
+    assumable: AssumableDetails
+    is_affordable: bool                         # piti.total_monthly ≤ profile.max_monthly_piti
+    alert_priority: AlertPriority
+    why_matched: list[str] = Field(default_factory=list)
+    assumable_piti: Optional[PITIBreakdown] = None  # PITI at assumable rate/balance
+    matched_at: datetime = Field(default_factory=datetime.utcnow)
