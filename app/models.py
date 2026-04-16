@@ -125,10 +125,7 @@ class SearchProfile(BaseModel):
 
     # ── Data sources ──────────────────────────────────────────────────────────
     sources: list[DataSource] = Field(
-        default_factory=lambda: [
-            DataSource.ZILLOW, DataSource.REDFIN,
-            DataSource.REALTOR, DataSource.HOMES,
-        ]
+        default_factory=lambda: [DataSource.REDFIN, DataSource.REALTOR]
     )
 
     @field_validator("zip_codes")

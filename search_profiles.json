@@ -14,7 +14,7 @@
       "max_hoa_monthly": 50.0,
       "monthly_insurance": 200.0,
       "max_price": 1400000,
-      "sources": ["zillow", "redfin"]
+      "sources": ["redfin", "realtor"]
     },
     {
       "name": "Ramona CA",
@@ -29,7 +29,7 @@
       "max_hoa_monthly": 50.0,
       "monthly_insurance": 200.0,
       "max_price": 1400000,
-      "sources": ["zillow", "redfin"]
+      "sources": ["redfin", "realtor"]
     },
     {
       "name": "Valley Center CA",
@@ -44,7 +44,7 @@
       "max_hoa_monthly": 50.0,
       "monthly_insurance": 200.0,
       "max_price": 1400000,
-      "sources": ["zillow", "redfin"]
+      "sources": ["redfin", "realtor"]
     },
     {
       "name": "Poway CA",
@@ -59,7 +59,7 @@
       "max_hoa_monthly": 50.0,
       "monthly_insurance": 200.0,
       "max_price": 1400000,
-      "sources": ["zillow", "redfin"]
+      "sources": ["redfin", "realtor"]
     },
     {
       "name": "Durham NC",
@@ -74,7 +74,7 @@
       "max_hoa_monthly": 50.0,
       "monthly_insurance": 200.0,
       "max_price": null,
-      "sources": ["zillow", "redfin"]
+      "sources": ["redfin", "realtor"]
     },
     {
       "name": "Lake Hartwell GA/SC",
@@ -89,7 +89,7 @@
       "max_hoa_monthly": 50.0,
       "monthly_insurance": 200.0,
       "max_price": null,
-      "sources": ["zillow", "redfin"]
+      "sources": ["redfin", "realtor"]
     }
   ]
 }
