@@ -191,6 +191,29 @@ class EmailAlert(BaseAlert):
         html = _build_digest_html(results)
         await self._deliver(subject, html)
 
+    async def send_run_summary(self, results: list[MatchResult], profiles_run: list[str]) -> None:
+        """Send a run report regardless of match count — useful for cron health checks."""
+        if not self.is_configured:
+            return
+        if results:
+            subject = f"[find-a-home] {len(results)} new match(es) — {', '.join(profiles_run)}"
+            html = _build_digest_html(results)
+        else:
+            subject = f"[find-a-home] No new matches — {', '.join(profiles_run)}"
+            html = f"""
+            <!DOCTYPE html>
+            <html><body style="max-width:700px;margin:0 auto;padding:16px;font-family:sans-serif">
+              <h1 style="border-bottom:2px solid #1565c0;padding-bottom:8px">find-a-home: No New Matches</h1>
+              <p style="color:#555">
+                Profiles checked: {', '.join(profiles_run)}<br>
+                No listings passed all filters this run.
+              </p>
+              <p style="font-size:0.8em;color:#aaa;margin-top:32px">
+                Sent by find-a-home &mdash; edit search_profiles.json to adjust criteria.
+              </p>
+            </body></html>"""
+        await self._deliver(subject, html)
+
     async def _deliver(self, subject: str, html: str) -> None:
         await asyncio.get_event_loop().run_in_executor(
             None, self._deliver_sync, subject, html
@@ -199,11 +222,25 @@ class EmailAlert(BaseAlert):
     def _deliver_sync(self, subject: str, html: str) -> None:
         if settings.sendgrid_api_key:
             self._send_sendgrid(subject, html)
+        elif settings.smtp_host:
+            self._send_smtp(subject, html)
         else:
-            logger.warning(
-                "No SENDGRID_API_KEY set — email alert skipped. "
-                "Set SENDGRID_API_KEY or configure SMTP credentials."
-            )
+            logger.warning("No email transport configured — set SMTP_HOST or SENDGRID_API_KEY in .env")
+
+    def _send_smtp(self, subject: str, html: str) -> None:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = settings.alert_email_from or settings.smtp_user
+            msg["To"] = settings.alert_email_to
+            msg.attach(MIMEText(html, "html"))
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+                server.starttls()
+                server.login(settings.smtp_user, settings.smtp_password)
+                server.sendmail(msg["From"], [settings.alert_email_to], msg.as_string())
+            logger.info("Email sent via SMTP to %s", settings.alert_email_to)
+        except Exception as exc:
+            logger.error("SMTP send failed: %s", exc)
 
     def _send_sendgrid(self, subject: str, html: str) -> None:
         try:

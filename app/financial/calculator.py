@@ -73,7 +73,14 @@ def calculate_piti(
     pi = monthly_principal_interest(loan, rate)
     taxes = (price * tax_rate) / 12
     insurance = profile.monthly_insurance
-    total = pi + taxes + insurance
+
+    # PMI applies when LTV > 80% (down payment < 20% of purchase price).
+    # Typical rate: 0.85% of loan amount annually.
+    # Not applied when an explicit loan_amount_override is given (e.g. assumable balance).
+    ltv = loan / price if price > 0 else 0
+    pmi = (loan * 0.0085 / 12) if (loan_amount_override is None and ltv > 0.80) else 0.0
+
+    total = pi + taxes + insurance + pmi
 
     return PITIBreakdown(
         loan_amount=round(loan, 2),
@@ -81,6 +88,7 @@ def calculate_piti(
         principal_interest=round(pi, 2),
         monthly_taxes=round(taxes, 2),
         monthly_insurance=round(insurance, 2),
+        monthly_pmi=round(pmi, 2),
         total_monthly=round(total, 2),
     )
 

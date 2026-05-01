@@ -32,6 +32,7 @@ from rich.text import Text
 from app.config import load_profiles, settings
 from app.engine import Engine
 from app.financial.calculator import calculate_piti, max_affordable_price
+from app.hazards import hazard_notes
 from app.models import AlertPriority, DataSource, MatchResult, SearchProfile
 
 console = Console()
@@ -80,9 +81,29 @@ def _render_result(result: MatchResult) -> None:
         + (f"  |  {listing.sqft:,} sqft" if listing.sqft else ""),
         f"PITI (market): [bold]${piti.total_monthly:,.0f}/mo[/bold]  "
         f"({piti.formatted})",
-        f"HOA: {'$' + f'{listing.hoa_monthly:,.0f}/mo' if listing.hoa_monthly else 'None / not reported'}",
+        f"HOA: {'$' + f'{listing.hoa_monthly:,.0f}/mo' if listing.hoa_monthly else 'None / not reported'}"
+        + (f"  |  [yellow]PMI: ${piti.monthly_pmi:,.0f}/mo (< 20% down)[/yellow]" if piti.monthly_pmi else ""),
         f"Source: [link={listing.url}]{listing.url}[/link]",
     ]
+
+    hazards = hazard_notes(listing.zip_code)
+    if hazards:
+        lines.append("")
+        for h in hazards:
+            lines.append(f"[bold red]{h}[/bold red]")
+
+    if listing.deal_signals:
+        lines.append("")
+        lines.append("[bold cyan]Deal signals:[/bold cyan]  " + "  •  ".join(listing.deal_signals))
+
+    if listing.has_solar:
+        lines.append("[bold green]Solar[/bold green]  Solar system mentioned in listing")
+
+    if result.waterway and result.waterway.found:
+        w = result.waterway
+        wtype = (w.waterway_type or "waterway").title()
+        name = f" — {w.name}" if w.name and w.name.lower() != wtype.lower() else ""
+        lines.append(f"[bold blue]💧 {wtype}{name}[/bold blue]  within {w.within_feet}ft of address")
 
     if result.assumable.is_assumable:
         a = result.assumable
@@ -192,6 +213,8 @@ def cli(ctx: click.Context, verbose: bool) -> None:
               help="Only show listings with assumable loan keywords")
 @click.option("--has-solar", is_flag=True, default=False,
               help="Only show listings with solar mentioned")
+@click.option("--waterway-feet", type=int, default=None,
+              help="Only show listings with a stream/river within this many feet (e.g. 150)")
 @click.pass_context
 def run(
     ctx: click.Context,
@@ -211,6 +234,7 @@ def run(
     max_hoa: Optional[float],
     assumable_only: bool,
     has_solar: bool,
+    waterway_feet: Optional[int],
 ) -> None:
     """
     Run scrapers, apply filters, send alerts for new matches.
@@ -251,10 +275,22 @@ def run(
     if max_hoa is not None:       overrides["max_hoa_monthly"] = max_hoa
     if assumable_only:            overrides["assumable_only"] = True
     if has_solar:                 overrides["requires_solar"] = True
+    if waterway_feet is not None: overrides["waterway_within_feet"] = waterway_feet
 
     if overrides:
         profiles = [p.model_copy(update=overrides) for p in profiles]
         console.print(f"[cyan]Overrides applied:[/cyan] {overrides}")
+
+    # Fetch live rate unless caller explicitly overrode it
+    if rate is None:
+        import asyncio as _asyncio
+        from app.rates import fetch_current_rates
+        live = _asyncio.run(fetch_current_rates())
+        live_rate = live["rate_30yr"]
+        console.print(
+            f"[cyan]Rate:[/cyan] {live_rate*100:.2f}% (Freddie Mac PMMS, as of {live['as_of']})"
+        )
+        profiles = [p.model_copy(update={"interest_rate": live_rate}) for p in profiles]
 
     sources_override = [DataSource(s) for s in sources] if sources else None
 

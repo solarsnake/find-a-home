@@ -1,30 +1,44 @@
-# Environment & secrets
+# Secrets & credentials
 .env
-.env.local
+.env.*
+!.env.example
 
-# Runtime data (persisted between runs — mount as a volume in Docker)
-data/
+# Seen-listing state (delete to reprocess all listings)
+data/seen_listings.json
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-.Python
 *.egg-info/
+*.egg
 dist/
 build/
+.eggs/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv/
 venv/
 env/
+ENV/
 
-# Playwright browsers (installed at runtime)
+# Playwright browser binaries
 .playwright/
 
-# IDE
-.vscode/
-.idea/
-*.swp
+# Logs
+*.log
 
 # macOS
 .DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo

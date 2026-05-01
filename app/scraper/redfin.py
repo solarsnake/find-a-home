@@ -68,12 +68,28 @@ def _parse_stats(stats_text: str) -> tuple[int, float, Optional[int]]:
     return beds, baths, sqft
 
 
-def _search_url(zip_code: str, min_beds: int, min_baths: float) -> str:
+def _search_url(zip_code: str, min_beds: int, min_baths: float, page: int = 1) -> str:
     baths_int = int(min_baths)
-    return (
+    base = (
         f"{BASE}/zipcode/{zip_code}/filter/"
         f"min-beds={min_beds},min-baths={baths_int},property-type=house"
     )
+    return base if page == 1 else f"{base}/page-{page}"
+
+
+async def _has_next_page(page: "Page") -> bool:
+    """Return True if Redfin shows a next-page control."""
+    selectors = [
+        "button[data-rf-test-id='pagination-next-button']:not([disabled])",
+        "a[aria-label='Next Page']",
+        ".PaginationButton--next:not(.disabled)",
+        "[class*='nextPage']:not([disabled])",
+    ]
+    for sel in selectors:
+        el = await page.query_selector(sel)
+        if el:
+            return True
+    return False
 
 
 class RedfinScraper(BaseScraper):
@@ -229,24 +245,38 @@ class RedfinScraper(BaseScraper):
 
     async def search(self, profile: SearchProfile) -> AsyncIterator[RawListing]:
         seen_in_run: set[str] = set()
+        max_pages = 10  # safety cap — Redfin rarely has more than 3-4 pages per zip
 
         for zip_code in profile.zip_codes:
-            url = _search_url(zip_code, profile.min_bedrooms, profile.min_bathrooms)
-            page = await self._new_page()
+            raw_listings: list[dict] = []
 
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                # Let the page JS render the listing cards
-                await asyncio.sleep(6)
+            for page_num in range(1, max_pages + 1):
+                url = _search_url(zip_code, profile.min_bedrooms, profile.min_bathrooms, page_num)
+                page = await self._new_page()
+                has_more = False
 
-                raw_listings = await self._parse_cards(page)
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                    await asyncio.sleep(6)
 
-            except Exception as exc:
-                raise ScraperError("redfin", str(exc), zip_code=zip_code) from exc
-            finally:
-                # Close the search page BEFORE opening detail pages —
-                # Redfin/CloudFront blocks concurrent pages from the same context.
-                await page.close()
+                    cards = await self._parse_cards(page)
+                    raw_listings.extend(cards)
+
+                    if page_num < max_pages:
+                        has_more = await _has_next_page(page)
+
+                except Exception as exc:
+                    await page.close()
+                    raise ScraperError("redfin", str(exc), zip_code=zip_code) from exc
+                finally:
+                    # Close search page BEFORE opening detail pages —
+                    # Redfin/CloudFront blocks concurrent pages from the same context.
+                    await page.close()
+
+                if not has_more:
+                    break
+
+                await self._random_delay()
 
             for item in raw_listings:
                 uid = f"redfin_{item['property_id']}"

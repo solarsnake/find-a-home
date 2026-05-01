@@ -19,7 +19,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 
 # ── Region / tax helpers ─────────────────────────────────────────────────────
@@ -118,10 +118,11 @@ class SearchProfile(BaseModel):
     monthly_insurance: float = Field(default=200.0, ge=0)
 
     # ── Special deal flags ────────────────────────────────────────────────────
-    # assumable_only: skip listings with no assumable-loan keywords
     assumable_only: bool = False
-    # requires_solar: skip listings with no solar mention in description
     requires_solar: bool = False
+    # waterway_within_feet: only include listings with a stream/river within this
+    # distance of the property address (via OSM Overpass). None = no filter.
+    waterway_within_feet: Optional[int] = None
 
     # ── Data sources ──────────────────────────────────────────────────────────
     sources: list[DataSource] = Field(
@@ -139,11 +140,38 @@ class SearchProfile(BaseModel):
 # ── Solar detection ───────────────────────────────────────────────────────────
 
 SOLAR_KEYWORDS = [
-    "solar panel", "solar system", "solar energy", "solar power",
-    "solar owned", "solar paid", "photovoltaic", "pv system",
+    "solar panel", "solar panels", "solar system", "solar energy", "solar power",
+    "solar owned", "owned solar", "solar paid", "paid-off solar", "paid off solar",
+    "solar array", "photovoltaic", "pv system",
     "net metering", "solar lease", "solar ppa", "rooftop solar",
     "solar installed", "solar included",
 ]
+
+# Deal-signal keywords — not filters, just surfaced as negotiability flags
+DEAL_SIGNAL_KEYWORDS: dict[str, str] = {
+    "as-is":             "As-Is",
+    "as is":             "As-Is",
+    "sold as is":        "As-Is",
+    "estate sale":       "Estate Sale",
+    "estate owned":      "Estate Sale",
+    "motivated seller":  "Motivated Seller",
+    "must sell":         "Motivated Seller",
+    "price reduced":     "Price Reduced",
+    "price improvement": "Price Reduced",
+    "reduced price":     "Price Reduced",
+    "fixer":             "Fixer-Upper",
+    "fixer upper":       "Fixer-Upper",
+    "fixer-upper":       "Fixer-Upper",
+    "tlc":               "Fixer-Upper",
+    "needs work":        "Fixer-Upper",
+    "handyman":          "Fixer-Upper",
+    "short sale":        "Short Sale",
+    "reo":               "REO/Bank-Owned",
+    "bank owned":        "REO/Bank-Owned",
+    "foreclosure":       "REO/Bank-Owned",
+}
+
+STALE_LISTING_DAYS = 45   # DOM threshold for "stale" flag
 
 
 # ── Raw listing (scraper output) ──────────────────────────────────────────────
@@ -177,11 +205,31 @@ class RawListing(BaseModel):
     def short_address(self) -> str:
         return f"{self.address}, {self.city}, {self.state} {self.zip_code}"
 
+    @computed_field  # type: ignore[misc]
     @property
     def has_solar(self) -> bool:
         """Detect solar mention in description."""
         desc = self.description.lower()
         return any(kw in desc for kw in SOLAR_KEYWORDS)
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def deal_signals(self) -> list[str]:
+        """Negotiability/deal flags detected in description (deduplicated labels)."""
+        desc = self.description.lower()
+        seen: set[str] = set()
+        result: list[str] = []
+        for kw, label in DEAL_SIGNAL_KEYWORDS.items():
+            if kw in desc and label not in seen:
+                seen.add(label)
+                result.append(label)
+        return result
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def is_stale(self) -> bool:
+        """True if listing has been on market longer than STALE_LISTING_DAYS."""
+        return self.days_on_market is not None and self.days_on_market >= STALE_LISTING_DAYS
 
 
 # ── Financial breakdown ───────────────────────────────────────────────────────
@@ -194,16 +242,20 @@ class PITIBreakdown(BaseModel):
     principal_interest: float
     monthly_taxes: float
     monthly_insurance: float
+    monthly_pmi: float = 0.0      # 0 when down payment ≥ 20 %
     total_monthly: float
 
     @property
     def formatted(self) -> str:
-        return (
+        parts = (
             f"P&I ${self.principal_interest:,.0f}  "
             f"+ Tax ${self.monthly_taxes:,.0f}  "
-            f"+ Ins ${self.monthly_insurance:,.0f}  "
-            f"= ${self.total_monthly:,.0f}/mo"
+            f"+ Ins ${self.monthly_insurance:,.0f}"
         )
+        if self.monthly_pmi:
+            parts += f"  + PMI ${self.monthly_pmi:,.0f}"
+        parts += f"  = ${self.total_monthly:,.0f}/mo"
+        return parts
 
 
 # ── Assumable-loan details ────────────────────────────────────────────────────
@@ -214,7 +266,7 @@ ASSUMABLE_KEYWORDS = [
     "assume the loan",
     "va assumption",
     "assumption of loan",
-    "subject to",
+    "subject to existing",   # "subject to existing financing/mortgage/loan"
     "take over the loan",
 ]
 
@@ -282,6 +334,15 @@ class AssumableDetails(BaseModel):
         )
 
 
+# ── Waterway details ──────────────────────────────────────────────────────────
+
+class WaterwayDetails(BaseModel):
+    found: bool = False
+    name: Optional[str] = None
+    waterway_type: Optional[str] = None   # river, stream, canal, …
+    within_feet: Optional[int] = None     # radius used for the check
+
+
 # ── Final match result ────────────────────────────────────────────────────────
 
 class MatchResult(BaseModel):
@@ -301,4 +362,6 @@ class MatchResult(BaseModel):
     alert_priority: AlertPriority
     why_matched: list[str] = Field(default_factory=list)
     assumable_piti: Optional[PITIBreakdown] = None  # PITI at assumable rate/balance
+    hazard_notes: list[str] = Field(default_factory=list)
+    waterway: Optional[WaterwayDetails] = None
     matched_at: datetime = Field(default_factory=datetime.utcnow)

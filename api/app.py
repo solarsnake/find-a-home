@@ -20,10 +20,15 @@ Endpoints (stub — ready to implement):
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from api.routes import listings, search
+from api.routes.geocode import router as geocode_router
 
 app = FastAPI(
     title="find-a-home",
@@ -42,8 +47,21 @@ app.add_middleware(
 
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(listings.router, prefix="/api/v1")
+app.include_router(geocode_router, prefix="/api/v1")
+
+_STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+async def serve_index() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "index.html")
+
+
+# Mount static assets (CSS, JS, images) after explicit routes
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

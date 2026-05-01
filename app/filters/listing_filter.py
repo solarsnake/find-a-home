@@ -16,9 +16,13 @@ Pure functions: no I/O, fully testable.
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from app.financial.calculator import calculate_piti
+
+logger = logging.getLogger(__name__)
+from app.hazards import hazard_notes as get_hazard_notes
 from app.models import (
     AlertPriority,
     AssumableDetails,
@@ -121,8 +125,13 @@ def _build_why_matched(
     if listing.has_solar:
         reasons.append("Solar detected in description")
 
-    if listing.days_on_market is not None:
+    if listing.is_stale:
+        reasons.append(f"⏳ {listing.days_on_market} days on market — may be negotiable")
+    elif listing.days_on_market is not None:
         reasons.append(f"{listing.days_on_market} days on market")
+
+    for signal in listing.deal_signals:
+        reasons.append(f"🏷 {signal}")
 
     if assumable.is_assumable:
         kws = ", ".join(f'"{k}"' for k in assumable.matched_keywords[:3])
@@ -168,13 +177,17 @@ def evaluate_listing(
         _check_hoa,
         _check_solar,
     ):
-        if check(listing, profile):
+        reason = check(listing, profile)
+        if reason:
+            logger.debug("SKIP %s — %s", listing.short_address, reason)
             return None
 
     # Assumable detection (needed for both assumable_only check and scoring)
     assumable = AssumableDetails.from_description(listing.description, listing.price)
 
-    if _check_assumable_only(listing, profile, assumable):
+    reason = _check_assumable_only(listing, profile, assumable)
+    if reason:
+        logger.debug("SKIP %s — %s", listing.short_address, reason)
         return None
 
     # PITI at market rate
@@ -183,6 +196,10 @@ def evaluate_listing(
 
     # Always include assumable deals even if over market-rate budget
     if not is_affordable and not assumable.is_assumable:
+        logger.debug(
+            "SKIP %s — PITI $%.0f/mo exceeds budget $%.0f/mo (no assumable)",
+            listing.short_address, piti.total_monthly, profile.max_monthly_piti,
+        )
         return None
 
     # PITI at assumable rate/balance (if we have enough info)
@@ -211,4 +228,5 @@ def evaluate_listing(
         alert_priority=priority,
         why_matched=why_matched,
         assumable_piti=assumable_piti,
+        hazard_notes=get_hazard_notes(listing.zip_code),
     )

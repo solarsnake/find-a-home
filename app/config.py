@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     alert_email_from: str = ""
     alert_email_to: str = ""
 
+    # ── SMTP (alternative to SendGrid) ────────────────────────────────────────
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+
     # ── Scraping ──────────────────────────────────────────────────────────────
     playwright_headless: bool = True
     scrape_delay_min: float = 2.5
@@ -44,7 +50,7 @@ class Settings(BaseSettings):
 
     # ── Storage ───────────────────────────────────────────────────────────────
     data_dir: str = "data"
-    seen_listings_file: str = "data/seen_listings.json"
+    seen_listings_file: str = "data/seen_listings.db"
 
     # ── Financial defaults ────────────────────────────────────────────────────
     default_interest_rate: float = 0.065
@@ -64,7 +70,7 @@ class Settings(BaseSettings):
 
     @property
     def email_enabled(self) -> bool:
-        return bool(self.sendgrid_api_key or self.alert_email_from)
+        return bool(self.sendgrid_api_key or self.smtp_host)
 
     def ensure_data_dir(self) -> None:
         Path(self.data_dir).mkdir(parents=True, exist_ok=True)

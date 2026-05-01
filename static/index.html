@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>find-a-home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-base:    #080c18;
+      --bg-surface: #0e1422;
+      --bg-card:    #121827;
+      --bg-card-2:  #161d2e;
+      --bg-input:   #0b1020;
+      --border:     #1e2a44;
+      --border-light: #263354;
+      --text-primary:   #e8edf8;
+      --text-secondary: #7a8aaa;
+      --text-muted:     #475569;
+      --accent-cyan:    #06c8d4;
+      --accent-blue:    #4f83f8;
+      --accent-violet:  #8b5cf6;
+      --accent-pink:    #d946a8;
+      --grad-main:      linear-gradient(135deg, #06c8d4 0%, #4f83f8 50%, #8b5cf6 100%);
+      --grad-card-head: linear-gradient(90deg, #1a2540 0%, #151e35 100%);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 10% 0%, rgba(79,131,248,.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 90% 100%, rgba(139,92,246,.06) 0%, transparent 60%);
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.4);
+    }
+    .card-header {
+      background: var(--grad-card-head);
+      border-bottom: 1px solid var(--border);
+      border-radius: 12px 12px 0 0 !important;
+      padding: .6rem 1rem;
+    }
+
+    /* ── Inputs ── */
+    .form-control, .form-select {
+      background: var(--bg-input);
+      border: 1px solid var(--border-light);
+      color: var(--text-primary);
+      border-radius: 8px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .form-control:focus, .form-select:focus {
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(79,131,248,.2);
+      outline: none;
+    }
+    .form-control::placeholder { color: var(--text-muted); }
+    .form-select option { background: #1a2035; }
+
+    /* ── Toggles ── */
+    .form-check-input:checked {
+      background-color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+    .form-check-input:focus {
+      box-shadow: 0 0 0 3px rgba(79,131,248,.2);
+      border-color: var(--accent-blue);
+    }
+
+    /* ── Labels ── */
+    .form-label {
+      color: var(--text-secondary);
+      font-size: .78rem;
+      font-weight: 500;
+      margin-bottom: .3rem;
+      letter-spacing: .01em;
+    }
+    .section-label {
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      font-weight: 600;
+      background: var(--grad-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Submit button ── */
+    #search-btn {
+      background: var(--grad-main);
+      border: none;
+      border-radius: 10px;
+      padding: .65rem;
+      font-weight: 600;
+      font-size: .95rem;
+      letter-spacing: .02em;
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(79,131,248,.35);
+      transition: opacity .2s, transform .15s, box-shadow .2s;
+    }
+    #search-btn:hover:not(:disabled) {
+      opacity: .92;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(79,131,248,.45);
+    }
+    #search-btn:disabled { opacity: .55; transform: none; }
+
+    /* ── Zip tags ── */
+    .zip-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      background: linear-gradient(135deg, rgba(79,131,248,.15), rgba(139,92,246,.15));
+      border: 1px solid rgba(79,131,248,.35);
+      border-radius: 999px;
+      padding: .18rem .7rem;
+      font-size: .78rem;
+      font-weight: 500;
+      color: #a5c0f8;
+    }
+    .zip-tag button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 0;
+      cursor: pointer;
+      line-height: 1;
+      transition: color .15s;
+    }
+    .zip-tag button:hover { color: #f87171; }
+    #zip-container { min-height: 2rem; }
+
+    /* ── Geocode dropdown ── */
+    #geocode-results {
+      position: absolute;
+      z-index: 1000;
+      width: 100%;
+      background: #111827;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      max-height: 220px;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,.6);
+      top: calc(100% + 4px);
+    }
+    .geo-result {
+      cursor: pointer;
+      transition: background .15s;
+      border-bottom: 1px solid var(--border);
+    }
+    .geo-result:last-child { border-bottom: none; }
+    .geo-result:hover { background: rgba(79,131,248,.08) !important; }
+
+    /* ── Result cards ── */
+    .result-card {
+      border-left: 3px solid var(--border-light);
+      border-radius: 12px;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .result-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    .result-card.priority-critical {
+      border-left-color: #ef4444;
+      box-shadow: 0 4px 24px rgba(239,68,68,.12);
+    }
+    .result-card.priority-high {
+      border-left-color: #f59e0b;
+      box-shadow: 0 4px 24px rgba(245,158,11,.12);
+    }
+    .result-card.priority-normal {
+      border-left-color: #22c55e;
+      box-shadow: 0 4px 24px rgba(34,197,94,.08);
+    }
+
+    /* ── Priority badges ── */
+    .priority-badge {
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      padding: .3rem .65rem;
+      border-radius: 999px;
+    }
+    .priority-badge.critical {
+      background: linear-gradient(135deg, #7f1d1d, #991b1b);
+      color: #fca5a5;
+      box-shadow: 0 2px 8px rgba(239,68,68,.3);
+    }
+    .priority-badge.high {
+      background: linear-gradient(135deg, #78350f, #92400e);
+      color: #fde68a;
+      box-shadow: 0 2px 8px rgba(245,158,11,.3);
+    }
+    .priority-badge.normal {
+      background: linear-gradient(135deg, #14532d, #166534);
+      color: #86efac;
+      box-shadow: 0 2px 8px rgba(34,197,94,.25);
+    }
+
+    /* ── Inline badges ── */
+    .signal-badge {
+      background: linear-gradient(135deg, rgba(79,131,248,.2), rgba(139,92,246,.2));
+      color: #93c5fd;
+      border: 1px solid rgba(79,131,248,.3);
+      font-size: .7rem;
+      font-weight: 500;
+      padding: .2rem .5rem;
+      border-radius: 6px;
+    }
+    .solar-badge {
+      background: linear-gradient(135deg, rgba(34,197,94,.15), rgba(16,185,129,.15));
+      color: #6ee7b7;
+      border: 1px solid rgba(34,197,94,.3);
+      font-size: .7rem;
+      font-weight: 500;
+      padding: .2rem .5rem;
+      border-radius: 6px;
+    }
+    .pmi-badge {
+      background: linear-gradient(135deg, rgba(245,158,11,.15), rgba(234,88,12,.15));
+      color: #fcd34d;
+      border: 1px solid rgba(245,158,11,.3);
+      font-size: .7rem;
+      font-weight: 500;
+      padding: .2rem .5rem;
+      border-radius: 6px;
+    }
+    .waterway-badge {
+      background: linear-gradient(135deg, rgba(6,182,212,.15), rgba(14,165,233,.15));
+      color: #7dd3fc;
+      border: 1px solid rgba(6,182,212,.3);
+      font-size: .7rem;
+      font-weight: 500;
+      padding: .2rem .5rem;
+      border-radius: 6px;
+    }
+    .badge-source {
+      background: rgba(30,42,68,.8);
+      color: #7a8aaa;
+      font-size: .68rem;
+      border: 1px solid var(--border);
+      padding: .2rem .5rem;
+      border-radius: 6px;
+    }
+    .badge-redfin  { background: rgba(15,50,35,.8);  color: #4ade80; border-color: rgba(74,222,128,.2); }
+    .badge-realtor { background: rgba(50,15,15,.8);  color: #f87171; border-color: rgba(248,113,113,.2); }
+    .badge-zillow  { background: rgba(50,40,10,.8);  color: #fbbf24; border-color: rgba(251,191,36,.2); }
+
+    /* ── Assumable block ── */
+    .assumable-block {
+      background: linear-gradient(135deg, rgba(99,102,241,.1), rgba(139,92,246,.1));
+      border: 1px solid rgba(99,102,241,.35);
+      border-radius: 10px;
+    }
+
+    /* ── Hazards ── */
+    .hazard-fire  { color: #f87171; }
+    .hazard-flood { color: #60a5fa; }
+
+    /* ── Header ── */
+    .app-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      background: var(--grad-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+    }
+    .app-subtitle {
+      font-size: .75rem;
+      color: var(--text-muted);
+      letter-spacing: .04em;
+    }
+
+    /* ── Links ── */
+    a { color: #6ea6f8; }
+    a:hover { color: #93c5fd; }
+
+    /* ── Spinner ── */
+    .spinner-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 200px;
+    }
+    .spinner-border { width: 2.5rem; height: 2.5rem; border-width: .22em; }
+
+    /* ── Misc ── */
+    #results-area { min-height: 200px; }
+    .price-highlight { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
+    .piti-amount { font-weight: 600; color: #7dd3fc; }
+    .address-link {
+      font-weight: 600;
+      font-size: .93rem;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+    .address-link:hover { color: #93c5fd; text-decoration: underline; }
+    .why-line { font-size: .73rem; color: var(--text-muted); }
+    .piti-breakdown { font-size: .73rem; color: var(--text-muted); }
+    .divider-dot { color: var(--border-light); }
+
+    /* ── Waterway hint ── */
+    .waterway-hint { font-size: .7rem; color: var(--text-muted); margin-top: .25rem; }
+
+    /* ── Source checkboxes ── */
+    .source-check { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; }
+
+    /* ── Rate badge ── */
+    #rate-source {
+      font-size: .65rem;
+      color: #4ade80;
+      font-weight: 500;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+    /* ── Fade-in for result cards ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .result-card { animation: fadeUp .25s ease both; }
+    .result-card:nth-child(2)  { animation-delay: .04s; }
+    .result-card:nth-child(3)  { animation-delay: .08s; }
+    .result-card:nth-child(4)  { animation-delay: .12s; }
+    .result-card:nth-child(5)  { animation-delay: .16s; }
+    .result-card:nth-child(n+6) { animation-delay: .2s; }
+  </style>
+</head>
+<body>
+<div class="container-fluid py-4 px-3" style="max-width:980px">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <div>
+      <div class="app-title">find-a-home</div>
+      <div class="app-subtitle">PITI analysis &nbsp;·&nbsp; assumable loans &nbsp;·&nbsp; deal signals &nbsp;·&nbsp; hazard flags</div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Search form -->
+    <div class="col-lg-5">
+      <form id="search-form">
+
+        <!-- Location -->
+        <div class="card mb-3">
+          <div class="card-header"><span class="section-label">Location</span></div>
+          <div class="card-body p-3">
+            <label class="form-label">City, zip, or region</label>
+            <div class="position-relative mb-2">
+              <input id="geo-input" type="text" class="form-control form-control-sm"
+                     placeholder="e.g. Escondido CA, 92025, Durham NC" autocomplete="off" />
+              <div id="geocode-results" class="d-none"></div>
+            </div>
+            <div id="zip-container" class="d-flex flex-wrap gap-1 mb-2"></div>
+            <div class="d-flex gap-2">
+              <input id="manual-zip" type="text" class="form-control form-control-sm"
+                     placeholder="Add zip manually" maxlength="5" style="width:130px" />
+              <button type="button" class="btn btn-sm fw-semibold"
+                      style="background:rgba(79,131,248,.15);border:1px solid rgba(79,131,248,.35);color:#7aadfa"
+                      onclick="addZipManual()">Add</button>
+            </div>
+            <div class="mt-2">
+              <label class="form-label">Tax region</label>
+              <select id="tax-region" class="form-select form-select-sm">
+                <option value="california">California</option>
+                <option value="north_carolina">North Carolina</option>
+                <option value="georgia">Georgia</option>
+                <option value="south_carolina">South Carolina</option>
+                <option value="texas">Texas</option>
+                <option value="florida">Florida</option>
+                <option value="colorado">Colorado</option>
+                <option value="washington">Washington</option>
+                <option value="oregon">Oregon</option>
+                <option value="arizona">Arizona</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Financial -->
+        <div class="card mb-3">
+          <div class="card-header"><span class="section-label">Financial</span></div>
+          <div class="card-body p-3">
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label">Max PITI / mo ($)</label>
+                <input name="max_monthly_piti" type="number" class="form-control form-control-sm"
+                       value="4500" min="500" step="100" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Down payment ($)</label>
+                <input name="down_payment" type="number" class="form-control form-control-sm"
+                       value="100000" min="0" step="5000" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">
+                  Interest rate (%)
+                  <span id="rate-source" class="ms-1"></span>
+                </label>
+                <input name="interest_rate_pct" id="rate-input" type="number"
+                       class="form-control form-control-sm" value="6.5" min="1" max="20" step="any" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Monthly insurance ($)</label>
+                <input name="monthly_insurance" type="number" class="form-control form-control-sm"
+                       value="200" min="0" step="10" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Min price ($)</label>
+                <input name="min_price" type="number" class="form-control form-control-sm"
+                       placeholder="none" min="0" step="10000" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Max price ($)</label>
+                <input name="max_price" type="number" class="form-control form-control-sm"
+                       placeholder="none" min="0" step="10000" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Property specs -->
+        <div class="card mb-3">
+          <div class="card-header"><span class="section-label">Property</span></div>
+          <div class="card-body p-3">
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label">Min beds</label>
+                <input name="min_bedrooms" type="number" class="form-control form-control-sm"
+                       value="3" min="1" max="10" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Max beds</label>
+                <input name="max_bedrooms" type="number" class="form-control form-control-sm"
+                       placeholder="any" min="1" max="20" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Min baths</label>
+                <input name="min_bathrooms" type="number" class="form-control form-control-sm"
+                       value="2" min="1" max="10" step="0.5" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Max HOA / mo ($)</label>
+                <input name="max_hoa_monthly" type="number" class="form-control form-control-sm"
+                       value="50" min="0" step="10" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Min sqft</label>
+                <input name="min_sqft" type="number" class="form-control form-control-sm"
+                       placeholder="none" min="0" step="100" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Max sqft</label>
+                <input name="max_sqft" type="number" class="form-control form-control-sm"
+                       placeholder="none" min="0" step="100" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filters & Sources -->
+        <div class="card mb-3">
+          <div class="card-header"><span class="section-label">Filters &amp; Sources</span></div>
+          <div class="card-body p-3">
+            <div class="mb-3">
+              <div class="form-check form-switch mb-1">
+                <input class="form-check-input" type="checkbox" id="assumable-only" />
+                <label class="form-check-label form-label" for="assumable-only">Assumable loans only</label>
+              </div>
+              <div class="form-check form-switch mb-1">
+                <input class="form-check-input" type="checkbox" id="requires-solar" />
+                <label class="form-check-label form-label" for="requires-solar">Requires solar</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="waterway-toggle"
+                       onchange="toggleWaterwayFeet(this)" />
+                <label class="form-check-label form-label" for="waterway-toggle">Stream / river on property</label>
+              </div>
+              <div id="waterway-feet-row" class="d-none mt-2 ms-4">
+                <label class="form-label">Max distance from address (ft)</label>
+                <input id="waterway-feet" type="number" class="form-control form-control-sm"
+                       value="150" min="50" max="2640" step="50" style="width:110px" />
+                <div class="waterway-hint">150 ft ≈ property edge &nbsp;·&nbsp; 500 ft ≈ visible / accessible</div>
+              </div>
+            </div>
+            <div class="section-label mb-2">Data sources</div>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check source-check">
+                <input class="form-check-input" type="checkbox" value="redfin" id="src-redfin" checked />
+                <label class="form-check-label form-label mb-0" for="src-redfin">Redfin</label>
+              </div>
+              <div class="form-check source-check">
+                <input class="form-check-input" type="checkbox" value="realtor" id="src-realtor" checked />
+                <label class="form-check-label form-label mb-0" for="src-realtor">Realtor</label>
+              </div>
+              <div class="form-check source-check">
+                <input class="form-check-input" type="checkbox" value="zillow" id="src-zillow" />
+                <label class="form-check-label form-label mb-0" for="src-zillow">Zillow</label>
+              </div>
+              <div class="form-check source-check">
+                <input class="form-check-input" type="checkbox" value="homes" id="src-homes" />
+                <label class="form-check-label form-label mb-0" for="src-homes">Homes.com</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn w-100" id="search-btn">Search listings</button>
+        <div id="form-error" class="text-danger mt-2 d-none" style="font-size:.82rem"></div>
+      </form>
+    </div>
+
+    <!-- Results -->
+    <div class="col-lg-7">
+      <div id="results-area">
+        <div class="text-center py-5" id="results-placeholder">
+          <div style="font-size:2.8rem;line-height:1">🏠</div>
+          <div class="mt-3 fw-semibold" style="color:var(--text-secondary)">Configure your search and click <span style="color:#7aadfa">Search listings</span></div>
+          <div class="mt-1" style="font-size:.78rem;color:var(--text-muted)">Live scrapes &nbsp;·&nbsp; Realtor ~5s &nbsp;·&nbsp; Redfin 2–3 min</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── Zip tag management ──────────────────────────────────────────────────────
+
+const zipSet = new Set();
+
+function renderZips() {
+  const c = document.getElementById('zip-container');
+  c.innerHTML = '';
+  zipSet.forEach(z => {
+    const tag = document.createElement('span');
+    tag.className = 'zip-tag';
+    tag.innerHTML = `${z} <button type="button" onclick="removeZip('${z}')" aria-label="Remove ${z}">×</button>`;
+    c.appendChild(tag);
+  });
+}
+
+function addZip(zip, label) {
+  zip = zip.trim();
+  if (zip && zip.match(/^\d{5}$/)) {
+    zipSet.add(zip);
+    renderZips();
+    autoSetRegion(label || '');
+  }
+}
+
+function addZips(zips, label) {
+  zips.forEach(z => zipSet.add(z.trim()));
+  renderZips();
+  autoSetRegion(label || '');
+}
+
+function removeZip(zip) { zipSet.delete(zip); renderZips(); }
+
+function addZipManual() {
+  const el = document.getElementById('manual-zip');
+  addZip(el.value);
+  el.value = '';
+}
+
+document.getElementById('manual-zip').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addZipManual(); }
+});
+
+// ── Tax region auto-detect ─────────────────────────────────────────────────
+
+const STATE_REGION = {
+  'california': 'california', 'ca': 'california',
+  'north carolina': 'north_carolina', 'nc': 'north_carolina',
+  'south carolina': 'south_carolina', 'sc': 'south_carolina',
+  'georgia': 'georgia', 'ga': 'georgia',
+  'texas': 'texas', 'tx': 'texas',
+  'florida': 'florida', 'fl': 'florida',
+  'colorado': 'colorado', 'co': 'colorado',
+  'washington': 'washington', 'wa': 'washington',
+  'oregon': 'oregon', 'or': 'oregon',
+  'arizona': 'arizona', 'az': 'arizona',
+};
+
+function autoSetRegion(label) {
+  const lower = label.toLowerCase();
+  for (const [key, val] of Object.entries(STATE_REGION)) {
+    if (lower.includes(key)) {
+      document.getElementById('tax-region').value = val;
+      return;
+    }
+  }
+}
+
+// ── Live mortgage rate ─────────────────────────────────────────────────────
+
+async function loadLiveRate() {
+  try {
+    const res = await fetch('/api/v1/rates');
+    if (!res.ok) return;
+    const d = await res.json();
+    const pct = (d.rate_30yr * 100).toFixed(2);
+    document.getElementById('rate-input').value = pct;
+    document.getElementById('rate-source').textContent =
+      `Freddie Mac PMMS · ${d.as_of}`;
+  } catch (_) {}
+}
+
+loadLiveRate();
+
+function toggleWaterwayFeet(cb) {
+  document.getElementById('waterway-feet-row').classList.toggle('d-none', !cb.checked);
+}
+
+// ── Geocoding ──────────────────────────────────────────────────────────────
+
+let geoTimer;
+const geoInput = document.getElementById('geo-input');
+const geoDrop  = document.getElementById('geocode-results');
+
+geoInput.addEventListener('input', () => {
+  clearTimeout(geoTimer);
+  const q = geoInput.value.trim();
+  if (q.length < 3) { geoDrop.classList.add('d-none'); geoDrop.innerHTML = ''; return; }
+  geoTimer = setTimeout(() => fetchGeo(q), 400);
+});
+
+geoInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { geoDrop.classList.add('d-none'); }
+});
+
+document.addEventListener('click', e => {
+  if (!geoInput.contains(e.target) && !geoDrop.contains(e.target)) {
+    geoDrop.classList.add('d-none');
+  }
+});
+
+async function fetchGeo(q) {
+  try {
+    const res = await fetch(`/api/v1/geocode?q=${encodeURIComponent(q)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    renderGeoDrop(data);
+  } catch (_) {}
+}
+
+function renderGeoDrop(items) {
+  if (!items.length) { geoDrop.classList.add('d-none'); return; }
+
+  const groups = new Map();
+  for (const it of items) {
+    const key = it.place_name + '|' + it.state;
+    if (!groups.has(key)) groups.set(key, { place_name: it.place_name, state: it.state, zips: [] });
+    groups.get(key).zips.push(it.zip_code);
+  }
+
+  const rows = [];
+  for (const [, g] of groups) {
+    const allZips = JSON.stringify(g.zips);
+    const label   = `${g.place_name}, ${g.state}`;
+    if (g.zips.length > 1) {
+      rows.push(`
+        <div class="geo-result px-3 py-2"
+             data-zips='${allZips}' data-label="${label}"
+             style="font-size:.84rem">
+          <span class="fw-semibold">${g.place_name}</span>
+          <span style="color:var(--text-muted)" class="ms-1">${g.state}</span>
+          <span class="ms-2" style="background:rgba(79,131,248,.15);color:#7aadfa;font-size:.68rem;padding:.15rem .45rem;border-radius:999px;border:1px solid rgba(79,131,248,.3)">
+            all ${g.zips.length} zips
+          </span>
+        </div>`);
+      g.zips.forEach(z => {
+        rows.push(`
+          <div class="geo-result px-4 py-1" style="font-size:.78rem" data-zip="${z}" data-label="${label}">
+            <span style="color:var(--text-muted)">└</span>
+            <span class="ms-1 fw-semibold">${z}</span>
+          </div>`);
+      });
+    } else {
+      rows.push(`
+        <div class="geo-result px-3 py-2" style="font-size:.84rem" data-zip="${g.zips[0]}" data-label="${label}">
+          <span class="fw-semibold">${g.zips[0]}</span>
+          <span style="color:var(--text-muted)" class="ms-2">${g.place_name}${g.state ? ', ' + g.state : ''}</span>
+        </div>`);
+    }
+  }
+
+  geoDrop.innerHTML = rows.join('');
+  geoDrop.querySelectorAll('.geo-result').forEach(el => {
+    el.addEventListener('click', () => {
+      if (el.dataset.zips) {
+        addZips(JSON.parse(el.dataset.zips), el.dataset.label);
+      } else {
+        addZip(el.dataset.zip, el.dataset.label);
+      }
+      geoDrop.classList.add('d-none');
+      geoInput.value = '';
+    });
+  });
+  geoDrop.classList.remove('d-none');
+}
+
+// ── Form submission ────────────────────────────────────────────────────────
+
+document.getElementById('search-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  document.getElementById('form-error').classList.add('d-none');
+
+  if (zipSet.size === 0) {
+    const q = document.getElementById('geo-input').value.trim();
+    if (!q) {
+      showFormError('Enter a city, region, or zip code to search.');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/v1/geocode?q=${encodeURIComponent(q)}`);
+      const items = res.ok ? await res.json() : [];
+      if (!items.length) {
+        showFormError(`No zip codes found for "${q}". Try a different location.`);
+        return;
+      }
+      addZips(items.map(it => it.zip_code), items[0].place_name + ', ' + items[0].state);
+      geoDrop.classList.add('d-none');
+    } catch (_) {
+      showFormError('Geocoding failed — please add a zip code manually.');
+      return;
+    }
+  }
+
+  const fd = new FormData(e.target);
+  const sources = [...document.querySelectorAll('input[type=checkbox][value]')]
+    .filter(el => el.checked).map(el => el.value);
+
+  if (!sources.length) {
+    showFormError('Select at least one data source.');
+    return;
+  }
+
+  const profile = {
+    name: 'Web Search',
+    zip_codes: [...zipSet],
+    tax_region: document.getElementById('tax-region').value,
+    max_monthly_piti: parseFloat(fd.get('max_monthly_piti')) || 4500,
+    down_payment: parseFloat(fd.get('down_payment')) || 100000,
+    interest_rate: (parseFloat(fd.get('interest_rate_pct')) || 6.5) / 100,
+    monthly_insurance: parseFloat(fd.get('monthly_insurance')) || 200,
+    min_bedrooms: parseInt(fd.get('min_bedrooms')) || 3,
+    min_bathrooms: parseFloat(fd.get('min_bathrooms')) || 2,
+    max_hoa_monthly: parseFloat(fd.get('max_hoa_monthly')) ?? 50,
+    assumable_only: document.getElementById('assumable-only').checked,
+    requires_solar: document.getElementById('requires-solar').checked,
+    sources,
+  };
+  if (document.getElementById('waterway-toggle').checked) {
+    profile.waterway_within_feet = parseInt(document.getElementById('waterway-feet').value) || 150;
+  }
+
+  const maxBeds = parseInt(fd.get('max_bedrooms'));
+  if (!isNaN(maxBeds) && fd.get('max_bedrooms')) profile.max_bedrooms = maxBeds;
+  const minSqft = parseInt(fd.get('min_sqft'));
+  if (!isNaN(minSqft) && fd.get('min_sqft')) profile.min_sqft = minSqft;
+  const maxSqft = parseInt(fd.get('max_sqft'));
+  if (!isNaN(maxSqft) && fd.get('max_sqft')) profile.max_sqft = maxSqft;
+  const minPrice = parseFloat(fd.get('min_price'));
+  if (!isNaN(minPrice) && fd.get('min_price')) profile.min_price = minPrice;
+  const maxPrice = parseFloat(fd.get('max_price'));
+  if (!isNaN(maxPrice) && fd.get('max_price')) profile.max_price = maxPrice;
+
+  showSpinner();
+  document.getElementById('search-btn').disabled = true;
+
+  try {
+    const res = await fetch('/api/v1/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showFormError(data.detail || `Server error ${res.status}`);
+      showPlaceholder();
+      return;
+    }
+    renderResults(data);
+  } catch (err) {
+    showFormError(`Network error: ${err.message}`);
+    showPlaceholder();
+  } finally {
+    document.getElementById('search-btn').disabled = false;
+  }
+});
+
+function showFormError(msg) {
+  const el = document.getElementById('form-error');
+  el.textContent = msg;
+  el.classList.remove('d-none');
+}
+
+function showSpinner() {
+  document.getElementById('results-area').innerHTML = `
+    <div class="spinner-wrapper">
+      <div class="text-center">
+        <div class="spinner-border" style="color:#4f83f8" role="status"></div>
+        <div class="mt-3" style="font-size:.82rem;color:var(--text-muted)">
+          Scraping listings…<br>Realtor ~5s &nbsp;·&nbsp; Redfin 2–3 min<br>
+          <span style="color:var(--text-muted);font-size:.75rem">Please wait</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function showPlaceholder() {
+  document.getElementById('results-area').innerHTML = `
+    <div class="text-center py-5" id="results-placeholder">
+      <div style="font-size:2.8rem">🏠</div>
+      <div class="mt-3 fw-semibold" style="color:var(--text-secondary)">Configure your search and click <span style="color:#7aadfa">Search listings</span></div>
+    </div>`;
+}
+
+// ── Result rendering ───────────────────────────────────────────────────────
+
+const PRIORITY_LABEL = {
+  critical: 'ASSUMABLE / UNDER BUDGET',
+  high:     'ASSUMABLE — REVIEW',
+  normal:   'MATCH',
+};
+
+function fmt(n)    { return n == null ? '—' : '$' + Math.round(n).toLocaleString(); }
+function fmtPct(r) { return r == null ? '—' : (r * 100).toFixed(2) + '%'; }
+
+function renderResults(results) {
+  const area = document.getElementById('results-area');
+  if (!results.length) {
+    area.innerHTML = `
+      <div class="text-center py-5">
+        <div style="font-size:2.8rem">🔍</div>
+        <div class="mt-3 fw-semibold" style="color:var(--text-secondary)">No matches found</div>
+        <div class="mt-1" style="font-size:.82rem;color:var(--text-muted)">Try relaxing your filters or adding more zip codes</div>
+      </div>`;
+    return;
+  }
+
+  const sorted = [...results].sort((a, b) => {
+    const order = { critical: 0, high: 1, normal: 2 };
+    return (order[a.alert_priority] ?? 9) - (order[b.alert_priority] ?? 9);
+  });
+
+  const countLine = `<div class="mb-3" style="font-size:.78rem;color:var(--text-muted)">${results.length} match${results.length !== 1 ? 'es' : ''} found</div>`;
+  area.innerHTML = countLine + sorted.map(renderCard).join('');
+}
+
+function renderCard(r) {
+  const l   = r.listing;
+  const p   = r.piti;
+  const a   = r.assumable;
+  const pri = r.alert_priority;
+
+  const hazards = (r.hazard_notes || []).map(h => {
+    const cls = h.includes('fire') || h.includes('Fire') ? 'hazard-fire' : 'hazard-flood';
+    return `<div class="${cls}" style="font-size:.78rem">${h}</div>`;
+  }).join('');
+
+  const signals = (l.deal_signals || []).map(s =>
+    `<span class="badge signal-badge me-1">${s}</span>`
+  ).join('');
+
+  const solarBadge = l.has_solar
+    ? `<span class="badge solar-badge me-1">☀ Solar</span>` : '';
+
+  const w = r.waterway;
+  const waterwayBadge = (w && w.found)
+    ? `<span class="badge waterway-badge me-1">💧 ${(w.waterway_type||'waterway').replace(/^\w/,c=>c.toUpperCase())}${w.name && w.name.toLowerCase()!==(w.waterway_type||'').toLowerCase() ? ' — '+w.name : ''}</span>`
+    : '';
+
+  const pmiBadge = p.monthly_pmi
+    ? `<span class="badge pmi-badge me-1">PMI ${fmt(p.monthly_pmi)}/mo</span>` : '';
+
+  const assumableBlock = a.is_assumable ? `
+    <div class="assumable-block p-2 mt-2">
+      <div class="fw-semibold mb-1" style="font-size:.8rem;background:linear-gradient(90deg,#818cf8,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Assumable Loan</div>
+      ${a.assumable_rate != null ? `<div style="font-size:.78rem;color:var(--text-secondary)">Rate: <strong style="color:var(--text-primary)">${fmtPct(a.assumable_rate)}</strong></div>` : ''}
+      ${a.estimated_loan_balance != null ? `<div style="font-size:.78rem;color:var(--text-secondary)">Balance: <strong style="color:var(--text-primary)">${fmt(a.estimated_loan_balance)}</strong></div>` : ''}
+      ${a.equity_gap != null ? `<div style="font-size:.78rem;color:var(--text-secondary)">Equity gap: <strong style="color:var(--text-primary)">${fmt(a.equity_gap)}</strong>${a.high_cash_required ? ' <span style="color:#f87171">⚠ HIGH CASH</span>' : ''}</div>` : ''}
+      ${r.assumable_piti ? `<div style="font-size:.78rem;color:var(--text-secondary)">PITI at assumable rate: <strong style="color:#7dd3fc">${fmt(r.assumable_piti.total_monthly)}/mo</strong></div>` : ''}
+    </div>` : '';
+
+  const whyLines = (r.why_matched || []).slice(0, 6).map(w =>
+    `<li class="why-line">${w}</li>`
+  ).join('');
+
+  return `
+  <div class="card result-card priority-${pri} mb-3">
+    <div class="card-body p-3">
+
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <a href="${l.url}" target="_blank" rel="noopener" class="address-link">${l.address}</a>
+          <div style="font-size:.78rem;color:var(--text-muted)">${l.city}, ${l.state} ${l.zip_code}</div>
+        </div>
+        <span class="badge priority-badge ${pri} ms-2 text-nowrap">${PRIORITY_LABEL[pri] || pri}</span>
+      </div>
+
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+        <span class="price-highlight">${fmt(l.price)}</span>
+        <span class="divider-dot">·</span>
+        <span style="font-size:.83rem;color:var(--text-secondary)">${l.bedrooms}bd / ${l.bathrooms}ba${l.sqft ? ' / ' + l.sqft.toLocaleString() + ' sqft' : ''}</span>
+        <span class="divider-dot">·</span>
+        <span style="font-size:.83rem">PITI <span class="piti-amount">${fmt(p.total_monthly)}/mo</span></span>
+      </div>
+
+      <div class="piti-breakdown mb-2">${p.formatted || ''}</div>
+
+      ${(solarBadge || waterwayBadge || pmiBadge || signals) ? `<div class="mb-2">${solarBadge}${waterwayBadge}${pmiBadge}${signals}</div>` : ''}
+
+      ${hazards ? `<div class="mb-2">${hazards}</div>` : ''}
+
+      ${assumableBlock}
+
+      ${whyLines ? `<ul class="mb-0 mt-2 ps-3">${whyLines}</ul>` : ''}
+
+      <div class="d-flex justify-content-between align-items-center mt-2 pt-2" style="border-top:1px solid var(--border)">
+        <span class="badge badge-source badge-${l.source}">${l.source}</span>
+        <span style="font-size:.72rem;color:var(--text-muted)">${l.hoa_monthly != null ? 'HOA ' + fmt(l.hoa_monthly) + '/mo' : 'HOA: not reported'}</span>
+      </div>
+    </div>
+  </div>`;
+}
+</script>
+</body>
+</html>
